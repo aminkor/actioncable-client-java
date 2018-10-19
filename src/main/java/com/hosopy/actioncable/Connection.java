@@ -260,7 +260,7 @@ public class Connection {
                     state = State.CLOSED;
 
                     if (listener != null) {
-                        listener.onFailure((Exception)t.getCause());
+                        listener.onFailure(new Exception(t));
                     }
                 }
             });
