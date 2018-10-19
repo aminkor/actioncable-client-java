@@ -3,9 +3,6 @@ package com.hosopy.actioncable;
 import com.hosopy.concurrent.EventLoop;
 import com.hosopy.util.QueryStringUtils;
 import okhttp3.*;
-import okhttp3.ws.WebSocket;
-import okhttp3.ws.WebSocketCall;
-import okhttp3.ws.WebSocketListener;
 import okio.Buffer;
 import okio.ByteString;
 
@@ -131,8 +128,6 @@ public class Connection {
                             webSocket.close(1000, "connection closed manually");
                             state = State.CLOSING;
                         }
-                    } catch (IOException e) {
-                        fireOnFailure(e);
                     } catch (IllegalStateException e) {
                         fireOnFailure(e);
                     }
@@ -211,22 +206,19 @@ public class Connection {
         final Request request = builder.build();
 
 
-        final WebSocketCall webSocketCall = WebSocketCall.create(client, request);
-        webSocketCall.enqueue(webSocketListener);
+//        final WebSocketCall webSocketCall = WebSocketCall.create(client, request);
+//        webSocketCall.enqueue(webSocketListener);
+        webSocket = client.newWebSocket(request, webSocketListener);
 
         client.dispatcher().executorService().shutdown();
     }
 
     private void doSend(String data) {
         if (webSocket != null) {
-            try {
-                RequestBody body = RequestBody.create(WebSocket.TEXT, ByteString.encodeUtf8(data));
-                webSocket.sendMessage(body);
-            } catch (IOException e) {
-                if (listener != null) {
-                    listener.onFailure(e);
-                }
-            }
+            RequestBody body = RequestBody.create(MediaType.parse("text/xml"), ByteString.encodeUtf8(data));
+//                RequestBody body = RequestBody.create(WebSocket.TEXT, ByteString.encodeUtf8(data));
+//                webSocket.sendMessage(body);
+            webSocket.send(data);
         }
     }
 
@@ -261,24 +253,34 @@ public class Connection {
         }
 
         @Override
-        public void onFailure(final IOException e, Response response) {
+        public void onFailure(WebSocket webSocket, Throwable t, Response response) {
             EventLoop.execute(new Runnable() {
                 @Override
                 public void run() {
                     state = State.CLOSED;
 
                     if (listener != null) {
-                        listener.onFailure(e);
+                        listener.onFailure((Exception)t.getCause());
                     }
                 }
             });
         }
 
         @Override
-        public void onMessage(ResponseBody message) throws IOException {
-            if (message.contentType().equals(WebSocket.TEXT)) {
-                final String text = message.string();
-                EventLoop.execute(new Runnable() {
+        public void onMessage(WebSocket webSocket, String text) {
+//            if (message.contentType().equals(WebSocket.TEXT)) {
+//                final String text = message.string();
+//                EventLoop.execute(new Runnable() {
+//                    @Override
+//                    public void run() {
+//                        if (text != null && listener != null) {
+//                            listener.onMessage(text);
+//                        }
+//                    }
+//                });
+//            }
+//            message.close();
+            EventLoop.execute(new Runnable() {
                     @Override
                     public void run() {
                         if (text != null && listener != null) {
@@ -286,16 +288,15 @@ public class Connection {
                         }
                     }
                 });
-            }
-            message.close();
         }
 
-        @Override
-        public void onPong(Buffer payload) {
-        }
+//        @Override
+//        public void onPong(Buffer payload) {
+//        }
+
 
         @Override
-        public void onClose(int code, final String reason) {
+        public void onClosed(WebSocket webSocket, int code, String reason) {
             Connection.this.state = State.CLOSED;
             EventLoop.execute(new Runnable() {
                 @Override
